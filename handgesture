@@ -1,0 +1,70 @@
+#include <WiFi.h>
+#include <esp_now.h>
+
+// === Flex Sensor Pins ===
+const int flexRightPin = 33;  // Right Finger
+const int flexLeftPin  = 32;  // Left Finger
+
+int rightFlexValue, leftFlexValue;
+String rightStatus = "", leftStatus = "";
+String headDirection = "";
+String emotion = "";
+
+
+typedef struct struct_message {
+  char direction[32]; // Head tilt directionx`
+} struct_message;
+
+struct_message incomingData;
+
+// === ESP-NOW Callback ===
+void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+  memcpy(&incomingData, data, sizeof(incomingData));
+  headDirection = String(incomingData.direction);
+  Serial.print("📩 Head Tilt Received: ");
+  Serial.println(headDirection);
+}
+
+// === Emotion Logic ===
+String detectEmotion(String right, String left, String head) {
+  if (right == "Stretched" && left == "Stretched" && head.indexOf("Right") >= 0) return "😊 Happy";
+  if (right == "Bent" && left == "Stretched" && head.indexOf("Front") >= 0) return "😢 Sad";
+  if (right == "Bent" && left == "Bent" && head.indexOf("Left") >= 0) return "😠 Angry";
+  if (right == "Stretched" && left == "Bent" && head.indexOf("Back") >= 0) return "😌 Calm";
+  return "🤔 Undefined";
+}
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
+  Serial.println("🔧 Emotion Detection System Ready");
+
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("❌ ESP-NOW Init Failed");
+    return;
+  }
+  esp_now_register_recv_cb(onDataRecv);
+}
+
+void loop() {
+  // === Read Flex Sensor Values ===
+  rightFlexValue = analogRead(flexRightPin);  // Pin 33
+  leftFlexValue  = analogRead(flexLeftPin);   // Pin 32
+
+  rightStatus = (rightFlexValue < 1250) ? "Bent" : "Stretched";
+  leftStatus  = (leftFlexValue > 1050) ? "Bent" : "Stretched";
+
+
+  emotion = detectEmotion(rightStatus, leftStatus, headDirection);
+
+  
+  Serial.println("===========================");
+  Serial.print("Right Finger: "); Serial.print(rightFlexValue); Serial.print(" → "); Serial.println(rightStatus);
+  Serial.print("Left  Finger: "); Serial.print(leftFlexValue);  Serial.print(" → "); Serial.println(leftStatus);
+  Serial.print("Head Tilt: "); Serial.println(headDirection);
+  Serial.print("🧠 Detected Emotion: "); Serial.println(emotion);
+  Serial.println("===========================");
+
+  delay(500);
+}
